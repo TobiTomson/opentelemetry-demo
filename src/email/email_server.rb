@@ -7,13 +7,7 @@ require "sinatra"
 require "open_feature/sdk"
 require "openfeature/flagd/provider"
 
-require "opentelemetry/sdk"
-require "opentelemetry-logs-sdk"
-require "opentelemetry-metrics-sdk"
-require "opentelemetry/exporter/otlp"
-require "opentelemetry-exporter-otlp-logs"
-require "opentelemetry-exporter-otlp-metrics"
-require "opentelemetry/instrumentation/sinatra"
+require "opentelemetry-api"
 
 set :port, ENV["EMAIL_PORT"]
 
@@ -29,14 +23,12 @@ OpenFeature::SDK.configure do |config|
   config.set_provider(flagd_client)
 end
 
-OpenTelemetry::SDK.configure do |c|
-  c.use "OpenTelemetry::Instrumentation::Sinatra"
-end
-
+# Tracing (Sinatra auto-instrumentation), the metrics reader and the logs
+# pipeline are configured by the container-injected SDK bootstrap
+# (src/email/otel_bootstrap.rb, loaded via RUBYOPT). Application code below uses
+# only the OpenTelemetry API to read the registered providers.
 $logger = OpenTelemetry.logger_provider.logger(name: 'email')
 
-otlp_metric_exporter = OpenTelemetry::Exporter::OTLP::Metrics::MetricsExporter.new
-OpenTelemetry.meter_provider.add_metric_reader(otlp_metric_exporter)
 meter = OpenTelemetry.meter_provider.meter("email")
 $confirmation_counter = meter.create_counter("demo.notification.confirmations", unit: "1", description: "Counts the number of order confirmation emails sent")
 

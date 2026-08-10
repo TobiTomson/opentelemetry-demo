@@ -1,0 +1,19 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# Server-side OpenTelemetry SDK, exporters and auto-instrumentation for the
+# email service. Installed at container build time into the shared GEM_HOME and
+# activated via src/email/otel_bootstrap.rb (RUBYOPT), so application source
+# depends only on the OpenTelemetry API. Swapping OTel distributions is a change
+# to this manifest/image, not to application code.
+
+source "https://rubygems.org"
+
+gem "opentelemetry-sdk",                   "~> 1.13"
+gem "opentelemetry-common",                "~> 0.25"
+gem "opentelemetry-logs-sdk",              "~> 0.6"
+gem "opentelemetry-metrics-sdk",           "~> 0.15"
+gem "opentelemetry-exporter-otlp",         "~> 0.34"
+gem "opentelemetry-exporter-otlp-metrics", "~> 0.10"
+gem "opentelemetry-exporter-otlp-logs",    "~> 0.5"
+gem "opentelemetry-instrumentation-all",   "~> 0.94"

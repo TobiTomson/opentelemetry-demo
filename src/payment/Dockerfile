@@ -11,6 +11,13 @@ COPY ./src/payment/package-lock.json package-lock.json
 
 RUN npm ci --omit=dev
 
+# Server-side OpenTelemetry SDK is decoupled from application source: it is
+# declared in src/payment/otel and installed here, then merged into the app's
+# node_modules so a single @opentelemetry/api instance is shared. Swapping OTel
+# distributions is a change to this manifest/image, not to application code.
+COPY ./src/payment/otel/package.json ./src/payment/otel/package-lock.json otel/
+RUN cd otel && npm ci --omit=dev && cp -r node_modules/. /usr/src/app/node_modules/
+
 # -----------------------------------------------------------------------------
 
 FROM gcr.io/distroless/nodejs22-debian12:nonroot@sha256:13593b7570658e8477de39e2f4a1dd25db2f836d68a0ba771251572d23bb4f8e
@@ -26,5 +33,7 @@ COPY ./src/payment/index.js index.js
 COPY ./src/payment/logger.js logger.js
 
 EXPOSE ${PAYMENT_PORT}
+
+ENV NODE_OPTIONS="--require @opentelemetry/auto-instrumentations-node/register"
 
 CMD ["index.js"]
