@@ -3,27 +3,10 @@
 
 const pino = require('pino')
 
-const transport = pino.transport({
-  target: 'pino-opentelemetry-transport',
-  options: {
-    logRecordProcessorOptions: [
-      {
-        recordProcessorType: 'batch',
-        exporterOptions: {
-          protocol: 'grpc',
-        }
-      },
-      {
-        recordProcessorType: 'simple',
-        exporterOptions: { protocol: 'console' }
-      }
-    ],
-    loggerName: 'payment-logger',
-    serviceVersion: '1.0.0'
-  }
-})
-
-const logger = pino(transport, {
+// Plain pino writing to stdout. Log records are exported to OpenTelemetry by the
+// container-injected auto-instrumentation (@opentelemetry/instrumentation-pino,
+// gated by OTEL_LOGS_EXPORTER), so application source depends only on the OTel API.
+const logger = pino({
   mixin() {
     return {
       'service.name': process.env['OTEL_SERVICE_NAME'],

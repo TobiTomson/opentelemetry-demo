@@ -16,7 +16,18 @@ RUN npm ci --omit=dev
 # node_modules so a single @opentelemetry/api instance is shared. Swapping OTel
 # distributions is a change to this manifest/image, not to application code.
 COPY ./src/payment/otel/package.json ./src/payment/otel/package-lock.json otel/
-RUN cd otel && npm ci --omit=dev && cp -r node_modules/. /usr/src/app/node_modules/
+# The otel tree is authoritative on merge (clobber) so the injected SDK stays
+# internally consistent (payment's app tree also pulls OTel packages via
+# pino-opentelemetry-transport, so no-clobber would leave a mismatched SDK). The
+# guard then fails the build if the merge changed the app-visible version of a
+# package the app imports directly (a single shared @opentelemetry/api and
+# @grpc/grpc-js), catching future drift loudly.
+RUN cd otel && npm ci --omit=dev && cp -r node_modules/. /usr/src/app/node_modules/ && \
+    for pkg in @opentelemetry/api @grpc/grpc-js; do \
+      exp=$(node -p "require('/usr/src/app/package.json').dependencies['$pkg']"); \
+      got=$(node -p "require('/usr/src/app/node_modules/$pkg/package.json').version"); \
+      test "$exp" = "$got" || { echo "ERROR: $pkg is $got after merge, app pins $exp"; exit 1; }; \
+    done
 
 # -----------------------------------------------------------------------------
 
