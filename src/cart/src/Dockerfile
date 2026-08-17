@@ -23,22 +23,35 @@ WORKDIR /usr/src/app/
 COPY ./src/cart/ ./
 COPY ./pb/ ./pb/
 
-RUN dotnet restore ./src/cart.csproj -r linux-musl-$TARGETARCH
+RUN dotnet restore ./src/cart.csproj -r linux-$TARGETARCH
 
-RUN dotnet publish ./src/cart.csproj -r linux-musl-$TARGETARCH --no-restore -o /cart
+# Framework-dependent publish (UseAppHost=false) so the app runs as
+# `dotnet cart.dll` under the injected .NET auto-instrumentation. The
+# OpenTelemetry.AutoInstrumentation package publishes instrument.sh and the CLR
+# profiler assets into the output; the SDK is not wired into application source.
+RUN dotnet publish ./src/cart.csproj -r linux-$TARGETARCH --no-restore -o /cart /p:UseAppHost=false
 
 # -----------------------------------------------------------------------------
 
-# https://mcr.microsoft.com/v2/dotnet/runtime-deps/tags/list
+# https://mcr.microsoft.com/v2/dotnet/aspnet/tags/list
 FROM ghcr.io/grpc-ecosystem/grpc-health-probe:v0.4.52@sha256:0303b506a288d544ed99fef17a55c8c5ce872f498f643c396b532b3595089ac9 AS grpc-health-probe
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.8-alpine3.23@sha256:f276c0256ffca8fe816d48ba261962b54fea1b0e6f870b6a60b3b705c89e78ac
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.10@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7
 
 WORKDIR /usr/src/app/
 COPY --from=builder /cart/ ./
 COPY --from=grpc-health-probe /ko-app/grpc-health-probe /bin/grpc_health_probe
 
+USER root
+RUN mkdir -p "/var/log/opentelemetry/dotnet" && \
+    chown app "/var/log/opentelemetry/dotnet" && \
+    chown app "/usr/src/app/instrument.sh" && \
+    chmod +x "/usr/src/app/instrument.sh"
+USER app
+
 ENV DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE=false
+ENV OTEL_DOTNET_AUTO_TRACES_ADDITIONAL_SOURCES=OpenTelemetry.Demo.Cart
+ENV OTEL_DOTNET_AUTO_METRICS_ADDITIONAL_SOURCES=OpenTelemetry.Demo.Cart,OpenFeature
 
 EXPOSE ${CART_PORT}
-ENTRYPOINT [ "./cart" ]
+ENTRYPOINT [ "./instrument.sh", "dotnet", "cart.dll" ]

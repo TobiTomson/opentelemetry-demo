@@ -9,8 +9,16 @@ RUN apk update && \
 
 COPY ./src/recommendation/requirements.txt requirements.txt
 
+# Server-side OpenTelemetry SDK is decoupled from application source: the app
+# lock (requirements.txt) declares only the OTel API, while the SDK and the
+# opentelemetry-instrument entrypoint are declared in ./otel and installed into
+# the same venv here. Swapping OTel distributions is a change to the otel
+# manifest/image, not to application code.
+COPY ./src/recommendation/otel/requirements.txt otel-requirements.txt
+
 RUN python -m venv venv && \
-    venv/bin/pip install --no-cache-dir --require-hashes -r requirements.txt
+    venv/bin/pip install --no-cache-dir --require-hashes -r requirements.txt && \
+    venv/bin/pip install --no-cache-dir --require-hashes -r otel-requirements.txt
 
 RUN venv/bin/opentelemetry-bootstrap -a install
 

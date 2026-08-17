@@ -40,6 +40,23 @@ COPY ./src/frontend/package-lock.json package-lock.json
 
 RUN npm ci --omit=dev
 
+# Server-side OpenTelemetry SDK is decoupled from application source: it is
+# declared in src/frontend/otel and installed here, then merged into the app's
+# node_modules so a single @opentelemetry/api instance is shared. Swapping OTel
+# distributions is a change to this manifest/image, not to application code.
+COPY ./src/frontend/otel/package.json ./src/frontend/otel/package-lock.json otel/
+# The otel tree is authoritative on merge (clobber) so the injected SDK stays
+# internally consistent. The guard then fails the build if the merge changed the
+# app-visible version of a package the app imports directly (a single shared
+# @opentelemetry/api and @grpc/grpc-js), catching future drift loudly instead of
+# silently shipping a version the app did not pin.
+RUN cd otel && npm ci --omit=dev && cp -r node_modules/. /app/node_modules/ && \
+    for pkg in @opentelemetry/api @grpc/grpc-js; do \
+      exp=$(node -p "require('/app/package.json').dependencies['$pkg']"); \
+      got=$(node -p "require('/app/node_modules/$pkg/package.json').version"); \
+      test "$exp" = "$got" || { echo "ERROR: $pkg is $got after merge, app pins $exp"; exit 1; }; \
+    done
+
 # -----------------------------------------------------------------------------
 
 FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:af85d11ce7ef10172855a6e3649e3e8125b1b9e3ca41849ec2918036f05cb212
@@ -53,8 +70,6 @@ COPY --from=deps /app/node_modules/ node_modules/
 
 COPY ./src/frontend/public/ public/
 
-COPY ./src/frontend/utils/telemetry/Instrumentation.js Instrumentation.js
-
 EXPOSE ${FRONTEND_PORT}
 
-CMD ["--require=./Instrumentation.js", "server.js"]
+CMD ["--require", "@opentelemetry/auto-instrumentations-node/register", "server.js"]

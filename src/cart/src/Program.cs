@@ -18,11 +18,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
-using OpenTelemetry.Instrumentation.StackExchangeRedis;
-using OpenTelemetry.Logs;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 using OpenFeature;
 using OpenFeature.Hooks;
 using OpenFeature.Providers.Flagd;
@@ -35,9 +30,12 @@ if (string.IsNullOrEmpty(valkeyAddress))
     Environment.Exit(1);
 }
 
-builder.Logging
-    .AddOpenTelemetry(options => options.AddOtlpExporter())
-    .AddConsole();
+// Logs, traces and metrics are captured by the container-injected .NET
+// auto-instrumentation (see the Dockerfile). Application code keeps only the
+// console logger and its own ActivitySource/Meter ("OpenTelemetry.Demo.Cart",
+// defined via System.Diagnostics), which the agent picks up through
+// OTEL_DOTNET_AUTO_TRACES_ADDITIONAL_SOURCES / _METRICS_ADDITIONAL_METERS.
+builder.Logging.AddConsole();
 
 builder.Services.AddSingleton<ICartStore>(x =>
 {
@@ -62,30 +60,6 @@ builder.Services.AddSingleton(x =>
 ));
 
 
-Action<ResourceBuilder> appResourceBuilder =
-    resource => resource
-        .AddService(builder.Environment.ApplicationName)
-        .AddContainerDetector()
-        .AddHostDetector();
-
-builder.Services.AddOpenTelemetry()
-    .ConfigureResource(appResourceBuilder)
-    .WithTracing(tracerBuilder => tracerBuilder
-        .AddSource("OpenTelemetry.Demo.Cart")
-        .AddRedisInstrumentation(
-            options => options.SetVerboseDatabaseStatements = true)
-        .AddAspNetCoreInstrumentation()
-        .AddGrpcClientInstrumentation()
-        .AddHttpClientInstrumentation()
-        .AddOtlpExporter())
-    .WithMetrics(meterBuilder => meterBuilder
-        .AddMeter("OpenTelemetry.Demo.Cart")
-        .AddMeter("OpenFeature")
-        .AddProcessInstrumentation()
-        .AddRuntimeInstrumentation()
-        .AddAspNetCoreInstrumentation()
-        .SetExemplarFilter(ExemplarFilterType.TraceBased)
-        .AddOtlpExporter());
 builder.Services.AddGrpc();
 builder.Services.AddSingleton<readinessCheck>();
 builder.Services.AddGrpcHealthChecks()
@@ -94,9 +68,6 @@ builder.Services.AddGrpcHealthChecks()
 builder.Services.AddSingleton<HealthServiceImpl>();
 
 var app = builder.Build();
-
-var ValkeyCartStore = (ValkeyCartStore)app.Services.GetRequiredService<ICartStore>();
-app.Services.GetRequiredService<StackExchangeRedisInstrumentation>().AddConnection(ValkeyCartStore.GetConnection());
 
 app.MapGrpcService<CartService>();
 app.MapGrpcService<HealthServiceImpl>();

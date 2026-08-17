@@ -15,14 +15,10 @@ gem "google-protobuf", "~> 4.35.1"
 
 gem "ostruct"
 
-gem "opentelemetry-sdk",                   "~> 1.13"
-gem "opentelemetry-common",                "~> 0.25"
-gem "opentelemetry-logs-sdk",              "~> 0.6"
-gem 'opentelemetry-metrics-sdk',           "~> 0.15"
-gem "opentelemetry-exporter-otlp",         "~> 0.34"
-gem 'opentelemetry-exporter-otlp-metrics', "~> 0.10"
-gem 'opentelemetry-exporter-otlp-logs',    "~> 0.5"
-gem "opentelemetry-instrumentation-all",   "~> 0.94"
+# Application source depends only on the OpenTelemetry API. The SDK, exporters
+# and auto-instrumentation are declared in ./otel/Gemfile and injected at the
+# container layer (see src/email/otel_bootstrap.rb + RUBYOPT in the Dockerfile).
+gem "opentelemetry-api", "~> 1.5"
 
 gem "openfeature-sdk", "~> 0.6"
 gem "openfeature-flagd-provider", "~> 0.1"
